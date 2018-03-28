@@ -1,0 +1,38 @@
+﻿<Window x:Name="GMTools" x:Class="GMTools.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:GMTools"
+        mc:Ignorable="d"
+        Title="GMTools" Height="350" Width="566" MinWidth="566" MinHeight="350">
+    <Grid>
+        <Button x:Name="ConnectButton" Content="连接" Margin="433,0,0,20" VerticalAlignment="Bottom" Click="ConnectButton_Click" HorizontalAlignment="Left" Width="75"/>
+        <TextBox x:Name="IP" Margin="417,0,0,92" TextWrapping="Wrap" Text="127.0.0.1" Height="23" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="120"/>
+        <TextBox x:Name="Port" Height="23" Margin="417,0,0,64" TextWrapping="Wrap" Text="11001" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="120"/>
+        <Label Content="IP:" Margin="375,0,0,90" Height="25" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="24"/>
+        <Label Content="Port:" Margin="375,0,0,64" Height="25" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="37"/>
+        <TextBox x:Name="MessageTextBox" Margin="10,10,10,122" TextWrapping="Wrap" HorizontalScrollBarVisibility="Visible" VerticalScrollBarVisibility="Auto"/>
+        <TextBox x:Name="CommandTextBox" Margin="10,0,0,64" Height="51" VerticalAlignment="Bottom" HorizontalAlignment="Left" Width="322" KeyDown="CommandTextBox_Key">
+            <TextBox.Resources>
+                <VisualBrush x:Key="HintText" TileMode="None" Opacity="0.5" Stretch="None" AlignmentY="Top" AlignmentX="Left" >
+                    <VisualBrush.Visual>
+                        <TextBlock FontStyle="Italic" Text="输入help获取命令列表，回车发送命令。"/>
+                    </VisualBrush.Visual>
+                </VisualBrush>
+            </TextBox.Resources>
+            <TextBox.Style>
+                <Style TargetType="TextBox">
+                    <Style.Triggers>
+                        <Trigger Property="Text" Value="{x:Null}">
+                            <Setter Property="Background" Value="{StaticResource HintText}"/>
+                        </Trigger>
+                        <Trigger Property="Text" Value="">
+                            <Setter Property="Background" Value="{StaticResource HintText}"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBox.Style>
+        </TextBox>
+    </Grid>
+</Window>
