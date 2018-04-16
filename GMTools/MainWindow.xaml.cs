@@ -1,5 +1,7 @@
-﻿using System;
+﻿using CsvHelper;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
@@ -24,9 +26,56 @@ namespace GMTools
     /// </summary>
     public partial class MainWindow : Window
     {
+        class ServerData
+        {
+            public ServerData(string ip,string port)
+            {
+                Ip = ip;
+                Port = port;
+                Index = ip + ":" + port;
+                Connected = false;
+            }
+            public string Index { get; set; }
+            public string Ip { get; set; }
+            public string Port { get; set; }
+            // 是否连接
+            public bool Connected { get; set; }
+        }
+        private string m_CsvPatch = ".\\ServerList.csv";
+        private Dictionary<int, Dictionary<string, string>> m_CsvData;
+        private List<string> m_CsvHeader;
+        private List<ServerData> m_ServerList;
         public MainWindow()
         {
             InitializeComponent();
+            m_ServerList = new List<ServerData>();
+            m_CsvData = new Dictionary<int, Dictionary<string, string>>();
+            m_CsvHeader = new List<string>();
+            if (LoadCsv())
+                LoadData();
+            Init();
+        }
+
+        private void Init()
+        {
+            ServerListCB.ItemsSource = m_ServerList;
+            ServerListCB.SelectedValuePath = "Index";
+            ServerListCB.DisplayMemberPath = "Index";
+            ServerListCB.SelectedIndex = 0;
+            SetServerIPAndPortTextBox();
+        }
+
+        private void SetServerIPAndPortTextBox()
+        {
+            if(ServerListCB.SelectedValue!=null)
+            {
+                var data = m_ServerList.Find(s => s.Index == ServerListCB.SelectedValue.ToString());
+                if (data != null)
+                {
+                    IPTB.Text = data.Ip;
+                    PortTB.Text = data.Port;
+                }
+            }
         }
 
         Socket client = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
@@ -36,13 +85,24 @@ namespace GMTools
             {
                 if(!client.Connected)
                 {
-                    IPAddress ip = IPAddress.Parse(IP.Text);
-                    IPEndPoint point = new IPEndPoint(ip, int.Parse(Port.Text));
+                    string iptext = IPTB.Text;
+                    string porttext = PortTB.Text;
+                    IPAddress ip = IPAddress.Parse(iptext);
+                    IPEndPoint point = new IPEndPoint(ip, int.Parse(porttext));
                     client.Connect(point);
 
-                    Thread th = new Thread(ReceiveMsg);
-                    th.IsBackground = true;
+                    Thread th = new Thread(ReceiveMsg)
+                    {
+                        IsBackground = true
+                    };
                     th.Start();
+
+                    // 如果输入栏中的ip和端口地址不在列表中，则添加
+                    var finddata = m_ServerList.Find(s => s.Ip == iptext && s.Port == porttext);
+                    if (finddata == null)
+                    {
+                        AddAndSaveCsvData(iptext, porttext);
+                    }
 
                     ConnectButton.Content = "断开连接";
                 }
@@ -166,7 +226,7 @@ namespace GMTools
             }
             catch (Exception ex)
             {
-                ShowMsg(ex.Message);
+                MessageBox.Show(ex.Message);
             }
         }
 
@@ -185,6 +245,135 @@ namespace GMTools
             {
                 ShowMsg(ex.Message);
             }
-        }        
+        }
+        
+        private void ServerListCB_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            ComboBox mCB = sender as ComboBox;
+            SetServerIPAndPortTextBox();
+        }
+
+        private bool LoadCsv()
+        {
+            try
+            {
+                StreamReader sr = new StreamReader(m_CsvPatch, Encoding.Default);
+                try
+                {
+                    var parser = new CsvParser(sr);
+                    int nIndex = 1;
+                    var headerrow = parser.Read();
+                    if (headerrow != null)
+                    {
+                        foreach (string element in headerrow)
+                        {
+                            m_CsvHeader.Add(element);
+                        }
+                    }
+                    while (true)
+                    {
+                        var row = parser.Read();
+                        if (row != null)
+                        {
+                            Dictionary<string, string> list = new Dictionary<string, string>();
+                            int i = 0;
+                            foreach (string element in row)
+                            {
+                                list.Add(m_CsvHeader[i], element);
+                                ++i;
+                            }
+
+                            m_CsvData.Add(nIndex, list);
+                            ++nIndex;
+                        }
+                        else
+                            break;
+                    }
+                    return true;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.ToString());
+                    return false;
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+                return false;
+            }
+        }
+
+        private void LoadData()
+        {
+            try
+            {
+                foreach (var iter in m_CsvData)
+                {
+                    var data = iter.Value;
+                    m_ServerList.Add(new ServerData(data["IP"], data["PORT"]));
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+                return;
+            }
+        }
+
+        private void AddAndSaveCsvData(string ip,string port)
+        {
+            try
+            {
+                // 添加数据
+                m_ServerList.Add(new ServerData(ip, port));
+                Dictionary<string, string> data = new Dictionary<string, string>();
+                data["IP"] = ip;
+                data["PORT"] = port;
+                m_CsvData[m_ServerList.Count] = data;
+                ServerListCB.Items.Refresh();
+
+                StreamWriter sr = new StreamWriter(m_CsvPatch, false, Encoding.Default);
+                var csv = new CsvWriter(sr);
+                List<string> list = new List<string>();
+
+                foreach (var header in m_CsvHeader)
+                {
+                    list.Add(header);
+                }
+
+                foreach (var csvdata in m_CsvData)
+                {
+                    Dictionary<string, string> value = csvdata.Value;
+                    for (int i = 0; i < m_CsvHeader.Count; ++i)
+                    {
+                        value.TryGetValue(m_CsvHeader[i], out string ret);
+                        if (ret != null)
+                        {
+                            list.Add(ret);
+                        }
+                    }
+                }
+
+                int index = 0;
+                foreach (var item in list)
+                {
+                    csv.WriteField(item);
+                    ++index;
+                    if (index == m_CsvHeader.Count)
+                    {
+                        index = 0;
+                        csv.NextRecord();
+                    }
+                }
+                csv.Flush();
+                sr.Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+                return;
+            }
+        }
     }
 }
