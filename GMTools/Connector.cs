@@ -105,7 +105,7 @@ namespace GMTools
 
                         int n = CurrentClient.Receive(buffer);
                         int size = buffer[6] + buffer[7] * 256;
-                        ParentWindow.GetMsgFromServer("收到消息：" + Encoding.Default.GetString(buffer, 8, size));
+                        ParentWindow.GetMsgFromServer("收到消息：\n" + Encoding.Default.GetString(buffer, 8, size));
                     }
                     Thread.Sleep(10);
                 }
@@ -168,6 +168,7 @@ namespace GMTools
                         }
 
                         CurrentClient.Send(buffer, index, SocketFlags.None);
+                        ParentWindow.GetMsgFromServer("发送消息：\n" + str);
                     }
                     catch (Exception ex)
                     {

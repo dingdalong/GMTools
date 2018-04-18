@@ -40,7 +40,7 @@ namespace GMTools
 
             public bool IsOverTime(Int64 time)
             {
-                return time - LastPingTime > 10000;
+                return time - LastPingTime > 10;
             }
 
             public void Close()
@@ -99,7 +99,6 @@ namespace GMTools
                             Index = server.Ip + ":" + server.Port,
                             IP = server.Ip,
                             Port = server.Port,
-                            Sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp),
                             ServerIcon = new ServerStatusBtn(),
                         };
                         serverstatus.ServerIcon.SetName(serverstatus.Index);
@@ -175,19 +174,10 @@ namespace GMTools
                 ServerStatus server = m_ServerList.Find(s => s.Index == ip + ":" + port);
                 if (server != null)
                 {
-                    if (server.LastPingTime > 0)
-                    {
-                        server.Close();
-                    }
+                    server.Close();
 
                     IPEndPoint point = new IPEndPoint(IPAddress.Parse(server.IP), int.Parse(server.Port));
                     server.Sock.Connect(point);
-
-                    Thread th = new Thread(new ParameterizedThreadStart(ReceiveMsg))
-                    {
-                        IsBackground = true
-                    };
-                    th.Start(server);
                     return true;
                 }
                 return false;
@@ -201,55 +191,50 @@ namespace GMTools
         /// <summary>
         /// 接受消息
         /// </summary>
-        private void ReceiveMsg(object obj)
+        private void ReceiveMsg(ServerStatus server)
         {
-            ServerStatus server = obj as ServerStatus;
-            while (MsgThreadRun)
+            try
             {
-                try
+                if (server != null && server.Sock != null && server.Sock.Connected)
                 {
-                    if (server != null && server.Sock != null && server.Sock.Connected)
+                    if (server.Sock.Available <= 0)
                     {
-                        if (server.Sock.Available <= 0)
-                        {
-                            Thread.Sleep(1);
-                            continue;
-                        }
+                        return;
+                    }
 
-                        byte[] buffer = new byte[1024 * 1024];
+                    byte[] buffer = new byte[1024 * 1024];
 
-                        int n = server.Sock.Receive(buffer);
-                        int size = buffer[6] + buffer[7] * 256;
-                        string str = Encoding.Default.GetString(buffer, 8, size);
-                        if (str == "__check_as_ping__")
+                    int n = server.Sock.Receive(buffer);
+                    int size = buffer[6] + buffer[7] * 256;
+                    string str = Encoding.Default.GetString(buffer, 8, size);
+                    if (str == "__check_as_ping__")
+                    {
+                        server.LastPingTime = GetNowTime();
+                    }
+                    else
+                    {
+                        if (server.ServerName == null)
                         {
-                            server.LastPingTime = GetNowTime();
-                        }
-                        else
-                        {
-                            if (server.ServerName == null)
+                            if (str == "GameServer" || str == "GameGateway")
                             {
-                                if (str == "GameServer" || str == "GameGateway")
-                                {
-                                    int lineid = int.Parse(server.Port) % 10;
-                                    str += "(" + lineid.ToString() + "线)";
-                                }
-                                server.ServerName = str;
-                                server.ServerIcon.SetName(str);
+                                int lineid = int.Parse(server.Port) % 10;
+                                str += "(" + lineid.ToString() + "线)";
                             }
+                            server.ServerName = str;
+                            server.ServerIcon.SetName(str);
                         }
                     }
-                    Thread.Sleep(1);
                 }
-                catch (Exception ex)
+                Thread.Sleep(1);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+                ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
                 {
-                    MessageBox.Show(ex.ToString());
-                    ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
-                    {
-                        if (server != null)
-                            server.Close();
-                    }));
-                }
+                    if (server != null)
+                        server.Close();
+                }));
             }
         }
 
@@ -265,6 +250,7 @@ namespace GMTools
                 {
                     if (server != null)
                     {
+                        ReceiveMsg(server);
                         Int64 nowtime = GetNowTime();
                         if(server.IsOverTime(nowtime))
                         {
