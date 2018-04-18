@@ -203,15 +203,18 @@ namespace GMTools
         /// </summary>
         private void ReceiveMsg(object obj)
         {
+            ServerStatus server = obj as ServerStatus;
             while (MsgThreadRun)
             {
-                ServerStatus server = obj as ServerStatus;
                 try
                 {
                     if (server != null && server.Sock != null && server.Sock.Connected)
                     {
                         if (server.Sock.Available <= 0)
+                        {
+                            Thread.Sleep(1);
                             continue;
+                        }
 
                         byte[] buffer = new byte[1024 * 1024];
 
@@ -236,7 +239,7 @@ namespace GMTools
                             }
                         }
                     }
-                    Thread.Sleep(10);
+                    Thread.Sleep(1);
                 }
                 catch (Exception ex)
                 {
@@ -255,9 +258,9 @@ namespace GMTools
         /// </summary>
         void Run(object obj)
         {
+            ServerStatus server = obj as ServerStatus;
             while (MsgThreadRun)
             {
-                ServerStatus server = obj as ServerStatus;
                 try
                 {
                     if (server != null)
@@ -278,8 +281,7 @@ namespace GMTools
                             server.ServerIcon.SetDisConnect();
                         }
                     }
-
-                    Thread.Sleep(10);
+                    Thread.Sleep(1);
                 }
                 catch (Exception ex)
                 {
