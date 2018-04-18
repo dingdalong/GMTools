@@ -1,13 +1,9 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Threading;
 
 namespace GMTools
 {
@@ -58,6 +54,7 @@ namespace GMTools
                 };
                 MsgThreadRun = true;
                 th.Start();
+                ParentWindow.ConnectButton.Content = "断开连接";
                 return true;
             }
             catch (Exception ex)
@@ -110,6 +107,7 @@ namespace GMTools
                         int size = buffer[6] + buffer[7] * 256;
                         ParentWindow.GetMsgFromServer("收到消息：" + Encoding.Default.GetString(buffer, 8, size));
                     }
+                    Thread.Sleep(10);
                 }
                 catch (Exception ex)
                 {

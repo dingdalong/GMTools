@@ -1,20 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
 
 namespace GMTools
 {
@@ -44,7 +34,7 @@ namespace GMTools
             // socket
             public Socket Sock;
             // 线程ID
-            public int ThreadId;
+            //public int ThreadId;
             // 图标
             public ServerStatusBtn ServerIcon;
 
@@ -77,15 +67,24 @@ namespace GMTools
         /// 接受消息线程Run标志
         /// </summary>
         private bool MsgThreadRun { set; get; }
-        
+
+        /// <summary>
+        /// 获取当前时间戳
+        /// </summary>
         private Int64 GetNowTime()
         {
             var nowtime = DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, 0);
             return Convert.ToInt64(nowtime.TotalSeconds);
         }
 
+        /// <summary>
+        /// 是否已经初始化
+        /// </summary>
         private bool IsInit;
 
+        /// <summary>
+        /// 初始化
+        /// </summary>
         public void Init()
         {
             try
@@ -106,6 +105,12 @@ namespace GMTools
                         serverstatus.ServerIcon.SetName(serverstatus.Index);
                         AllServerListWP.Children.Add(serverstatus.ServerIcon);
                         m_ServerList.Add(serverstatus);
+
+                        Thread th = new Thread(new ParameterizedThreadStart(Run))
+                        {
+                            IsBackground = true
+                        };
+                        th.Start(serverstatus);
                     }
                 }
                 else
@@ -113,6 +118,12 @@ namespace GMTools
                     foreach (var server in m_ServerList)
                     {
                         server.LastPingTime = 0;
+
+                        Thread th = new Thread(new ParameterizedThreadStart(Run))
+                        {
+                            IsBackground = true
+                        };
+                        th.Start(server);
                     }
                 }
             }
@@ -129,16 +140,11 @@ namespace GMTools
         {
             try
             {
+                MsgThreadRun = true;
                 Init();
 
                 ParentWindow.ConnectButton.IsEnabled = false;
                 ParentWindow.ServerConnector.DisConnect();
-                MsgThreadRun = true;
-                Thread th = new Thread(Run)
-                {
-                    IsBackground = true
-                };
-                th.Start();
             }
             catch (Exception ex)
             {
@@ -151,14 +157,17 @@ namespace GMTools
         /// </summary>
         public override void Close()
         {
+            MsgThreadRun = false;
             foreach (var server in m_ServerList)
             {
                 server.Close();
             }
-            MsgThreadRun = false;
             ParentWindow.ConnectButton.IsEnabled = true;
         }
 
+        /// <summary>
+        /// 尝试连接
+        /// </summary>
         private bool TryConnect(string ip, string port)
         {
             try
@@ -174,12 +183,11 @@ namespace GMTools
                     IPEndPoint point = new IPEndPoint(IPAddress.Parse(server.IP), int.Parse(server.Port));
                     server.Sock.Connect(point);
 
-                    Thread th = new Thread(ReceiveMsg)
+                    Thread th = new Thread(new ParameterizedThreadStart(ReceiveMsg))
                     {
                         IsBackground = true
                     };
-                    server.ThreadId = th.ManagedThreadId;
-                    th.Start();
+                    th.Start(server);
                     return true;
                 }
                 return false;
@@ -193,55 +201,68 @@ namespace GMTools
         /// <summary>
         /// 接受消息
         /// </summary>
-        private void ReceiveMsg()
+        private void ReceiveMsg(object obj)
         {
             while (MsgThreadRun)
             {
+                ServerStatus server = obj as ServerStatus;
                 try
                 {
-                    foreach(var server in m_ServerList)
+                    if (server != null && server.Sock != null && server.Sock.Connected)
                     {
-                        if (server.Sock != null && server.Sock.Connected)
+                        if (server.Sock.Available <= 0)
+                            continue;
+
+                        byte[] buffer = new byte[1024 * 1024];
+
+                        int n = server.Sock.Receive(buffer);
+                        int size = buffer[6] + buffer[7] * 256;
+                        string str = Encoding.Default.GetString(buffer, 8, size);
+                        if (str == "__check_as_ping__")
                         {
-                            if (server.Sock.Available <= 0)
-                                continue;
-
-                            byte[] buffer = new byte[1024 * 1024];
-
-                            int n = server.Sock.Receive(buffer);
-                            int size = buffer[6] + buffer[7] * 256;
-                            string str = Encoding.Default.GetString(buffer, 8, size);
-                            if (str == "ping")
+                            server.LastPingTime = GetNowTime();
+                        }
+                        else
+                        {
+                            if (server.ServerName == null)
                             {
-                                server.LastPingTime = GetNowTime();
-                            }
-                            else
-                            {
-                                if(server.ServerName == null)
+                                if (str == "GameServer" || str == "GameGateway")
                                 {
-                                    server.ServerName = str;
-                                    server.ServerIcon.SetName(str);
+                                    int lineid = int.Parse(server.Port) % 10;
+                                    str += "(" + lineid.ToString() + "线)";
                                 }
+                                server.ServerName = str;
+                                server.ServerIcon.SetName(str);
                             }
                         }
                     }
+                    Thread.Sleep(10);
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show(ex.ToString());
+                    ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
+                    {
+                        if (server != null)
+                            server.Close();
+                    }));
                 }
             }
         }
 
-        void Run()
+        /// <summary>
+        /// 超时检查
+        /// </summary>
+        void Run(object obj)
         {
             while (MsgThreadRun)
             {
+                ServerStatus server = obj as ServerStatus;
                 try
                 {
-                    Int64 nowtime = GetNowTime();
-                    foreach (var server in m_ServerList)
+                    if (server != null)
                     {
+                        Int64 nowtime = GetNowTime();
                         if(server.IsOverTime(nowtime))
                         {
                             // 再次尝试连接
@@ -257,11 +278,17 @@ namespace GMTools
                             server.ServerIcon.SetDisConnect();
                         }
                     }
+
                     Thread.Sleep(10);
                 }
                 catch (Exception ex)
                 {
                     MessageBox.Show(ex.ToString());
+                    ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
+                    {
+                        if (server != null)
+                            server.Close();
+                    }));
                 }
             }
         }
