@@ -105,7 +105,9 @@ namespace GMTools
 
                         int n = CurrentClient.Receive(buffer);
                         int size = buffer[6] + buffer[7] * 256;
-                        ParentWindow.GetMsgFromServer("收到消息：\n" + Encoding.Default.GetString(buffer, 8, size));
+                        string msg = Encoding.UTF8.GetString(buffer, 8, size);
+                        if (msg != "__check_as_ping__")
+                            ParentWindow.GetMsgFromServer("收到消息：\n" + msg);
                     }
                     Thread.Sleep(10);
                 }
@@ -135,7 +137,7 @@ namespace GMTools
                         int TotalLength = 4 + 2 + 2;
 
                         // 具体消息
-                        byte[] textbuffer = Encoding.Default.GetBytes(str);
+                        byte[] textbuffer = Encoding.UTF8.GetBytes(str);
                         TotalLength += textbuffer.Length;
 
                         byte[] totallengthbuffer = BitConverter.GetBytes(TotalLength);

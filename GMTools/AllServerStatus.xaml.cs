@@ -40,7 +40,7 @@ namespace GMTools
 
             public bool IsOverTime(Int64 time)
             {
-                return time - LastPingTime > 10;
+                return time - LastPingTime > 1;
             }
 
             public void Close()
