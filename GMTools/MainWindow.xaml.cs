@@ -64,7 +64,7 @@ namespace GMTools
         {
             InitializeComponent();
             m_ServerList = new List<ServerData>();
-            m_Connector = new Connector(this);
+            m_Connector = new Connector();
             m_CsvLoader = new CsvLoader();
             if (m_CsvLoader.LoadData())
                 LoadData();
@@ -183,8 +183,15 @@ namespace GMTools
 
                 if (ConnectButton.Content.ToString() == "连接")
                 {
-                    if (m_Connector.Connect(iptext, porttext))
+                    ConnectButton.Content = "连接中";
+                    if (m_Connector.Connect(iptext, porttext, Connected, Disconnected, ReceiveMsg))
                     {
+                        Thread th = new Thread(Run)
+                        {
+                            IsBackground = true
+                        };
+                        th.Start();
+
                         // 如果输入栏中的ip和端口地址不在列表中，则添加
                         var finddata = m_ServerList.Find(s => s.Ip == iptext && s.Port == porttext);
                         if (finddata == null)
@@ -204,6 +211,31 @@ namespace GMTools
             {
                 MessageBox.Show(ex.ToString());
                 Destroy();
+            }
+        }
+
+        public void Connected()
+        {
+            ConnectButton.Content = "断开连接";
+        }
+
+        public void Disconnected()
+        {
+            GetMsgFromServer("断开连接");
+            ConnectButton.Content = "连接";
+        }
+        public void ReceiveMsg(string msg)
+        {
+            if (msg != "__check_as_ping__")
+                GetMsgFromServer("收到消息：\n" + msg);
+        }
+
+        void Run()
+        {
+            while (true)
+            {
+                m_Connector.Dispatch();
+                Thread.Sleep(1);
             }
         }
 

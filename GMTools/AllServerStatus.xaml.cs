@@ -32,29 +32,65 @@ namespace GMTools
             // 服务器描述
             public string ServerName;
             // socket
-            public Socket Sock;
-            // 线程ID
-            //public int ThreadId;
+            public Connector Connector;
             // 图标
             public ServerStatusBtn ServerIcon;
 
             public bool IsOverTime(Int64 time)
             {
-                return time - LastPingTime > 1;
+                return LastPingTime > 0 && time - LastPingTime > 1;
             }
 
             public void Close()
             {
-                if (Sock != null)
+                if (Connector != null)
                 {
-                    if (Sock.Connected)
-                        Sock.Shutdown(SocketShutdown.Both);
-
-                    Sock.Close();
+                    if (Connector.IsConnected())
+                        Connector.DisConnect();
                 }
-
-                Sock = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                
                 LastPingTime = 0;
+                ServerIcon.SetDisConnect();
+            }
+
+            public void Connected()
+            {
+                LastPingTime = GetNowTime();
+                // 重新连接上的,设置为连接状态
+                ServerIcon.SetConnect();
+            }
+
+            public void Disconnected()
+            {
+                ServerIcon.SetDisConnect();
+            }
+            public void ReceiveMsg(string str)
+            {
+                try
+                {
+                    if (str == "__check_as_ping__")
+                    {
+                        LastPingTime = GetNowTime();
+                    }
+                    else
+                    {
+                        if (ServerName == null)
+                        {
+                            if (str == "GameServer" || str == "GameGateway")
+                            {
+                                int lineid = int.Parse(Port) % 10;
+                                str += "(" + lineid.ToString() + "线)";
+                            }
+                            ServerName = str;
+                            ServerIcon.SetName(str);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.ToString());
+                    Close();
+                }
             }
         }
 
@@ -71,12 +107,12 @@ namespace GMTools
         /// <summary>
         /// 获取当前时间戳
         /// </summary>
-        private Int64 GetNowTime()
+        public static Int64 GetNowTime()
         {
             var nowtime = DateTime.UtcNow - new DateTime(1970, 1, 1, 0, 0, 0, 0);
             return Convert.ToInt64(nowtime.TotalSeconds);
         }
-
+        
         /// <summary>
         /// 是否已经初始化
         /// </summary>
@@ -101,29 +137,30 @@ namespace GMTools
                             Port = server.Port,
                             ServerIcon = new ServerStatusBtn(),
                         };
+                        serverstatus.Connector = new Connector();
                         serverstatus.ServerIcon.SetName(serverstatus.Index);
                         AllServerListWP.Children.Add(serverstatus.ServerIcon);
                         m_ServerList.Add(serverstatus);
-
-                        Thread th = new Thread(new ParameterizedThreadStart(Run))
-                        {
-                            IsBackground = true
-                        };
-                        th.Start(serverstatus);
                     }
+
+                    Thread th = new Thread(Run)
+                    {
+                        IsBackground = true
+                    };
+                    th.Start();
                 }
                 else
                 {
                     foreach (var server in m_ServerList)
                     {
                         server.LastPingTime = 0;
-
-                        Thread th = new Thread(new ParameterizedThreadStart(Run))
-                        {
-                            IsBackground = true
-                        };
-                        th.Start(server);
                     }
+
+                    Thread th = new Thread(Run)
+                    {
+                        IsBackground = true
+                    };
+                    th.Start();
                 }
             }
             catch (Exception ex)
@@ -163,120 +200,46 @@ namespace GMTools
             }
             ParentWindow.ConnectButton.IsEnabled = true;
         }
-
-        /// <summary>
-        /// 尝试连接
-        /// </summary>
-        private bool TryConnect(string ip, string port)
-        {
-            try
-            {
-                ServerStatus server = m_ServerList.Find(s => s.Index == ip + ":" + port);
-                if (server != null)
-                {
-                    server.Close();
-
-                    IPEndPoint point = new IPEndPoint(IPAddress.Parse(server.IP), int.Parse(server.Port));
-                    server.Sock.Connect(point);
-                    return true;
-                }
-                return false;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// 接受消息
-        /// </summary>
-        private void ReceiveMsg(ServerStatus server)
-        {
-            try
-            {
-                if (server != null && server.Sock != null && server.Sock.Connected)
-                {
-                    if (server.Sock.Available <= 0)
-                    {
-                        return;
-                    }
-
-                    byte[] buffer = new byte[1024 * 1024];
-
-                    int n = server.Sock.Receive(buffer);
-                    int size = buffer[6] + buffer[7] * 256;
-                    string str = Encoding.Default.GetString(buffer, 8, size);
-                    if (str == "__check_as_ping__")
-                    {
-                        server.LastPingTime = GetNowTime();
-                    }
-                    else
-                    {
-                        if (server.ServerName == null)
-                        {
-                            if (str == "GameServer" || str == "GameGateway")
-                            {
-                                int lineid = int.Parse(server.Port) % 10;
-                                str += "(" + lineid.ToString() + "线)";
-                            }
-                            server.ServerName = str;
-                            server.ServerIcon.SetName(str);
-                        }
-                    }
-                }
-                Thread.Sleep(1);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString());
-                ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
-                {
-                    if (server != null)
-                        server.Close();
-                }));
-            }
-        }
-
+        
         /// <summary>
         /// 超时检查
         /// </summary>
-        void Run(object obj)
+        void Run()
         {
-            ServerStatus server = obj as ServerStatus;
             while (MsgThreadRun)
             {
-                try
+                foreach (var server in m_ServerList)
                 {
-                    if (server != null)
-                    {
-                        ReceiveMsg(server);
-                        Int64 nowtime = GetNowTime();
-                        if(server.IsOverTime(nowtime))
-                        {
-                            // 再次尝试连接
-                            if (TryConnect(server.IP, server.Port))
-                            {
-                                server.LastPingTime = nowtime;
-                                // 重新连接上的,设置为连接状态
-                                server.ServerIcon.SetConnect();
-                                continue;
-                            }
-
-                            // 重试后仍然未连接上的,设置为未连接状态
-                            server.ServerIcon.SetDisConnect();
-                        }
-                    }
-                    Thread.Sleep(1);
-                }
-                catch (Exception ex)
-                {
-                    MessageBox.Show(ex.ToString());
-                    ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
+                    try
                     {
                         if (server != null)
-                            server.Close();
-                    }));
+                        {
+                            Int64 nowtime = GetNowTime();
+                            if(server.IsOverTime(nowtime) || !server.Connector.IsConnected())
+                            {
+                                // 再次尝试连接
+                                if (server.Connector.Connect(server.IP, server.Port, server.Connected, server.Disconnected,
+                                    server.ReceiveMsg))
+                                {
+                                    continue;
+                                }
+
+                                // 重试后仍然未连接上的,设置为未连接状态
+                                server.ServerIcon.SetDisConnect();
+                            }
+                            server.Connector.Dispatch();
+                        }
+                        Thread.Sleep(1);
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show(ex.ToString());
+                        ParentWindow.Dispatcher.BeginInvoke(new Action(delegate
+                        {
+                            if (server != null)
+                                server.Close();
+                        }));
+                    }
                 }
             }
         }

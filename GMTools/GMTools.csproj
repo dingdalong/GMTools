@@ -61,6 +61,7 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="ProtoStream.cs" />
     <Compile Include="ServerStatusBtn.xaml.cs">
       <DependentUpon>ServerStatusBtn.xaml</DependentUpon>
     </Compile>

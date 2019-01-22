@@ -47,6 +47,7 @@ namespace GMTools
             if (e.Key == Key.Enter)
             {
                 ParentWindow.ServerConnector.SendMsg(CommandTextBox.Text);
+                ParentWindow.GetMsgFromServer("发送消息：\n" + CommandTextBox.Text);
                 CommandTextBox.Text = "";
             }
         }
